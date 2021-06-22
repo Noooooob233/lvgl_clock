@@ -1,0 +1,1 @@
+CSRCS += $(wildcard cJSON/*.c)
