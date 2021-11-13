@@ -283,17 +283,19 @@ weather_data_t *weather_data_upate()
             cJSON *code = cJSON_GetObjectItem(now, "code");
             cJSON *temp = cJSON_GetObjectItem(now, "temperature");
 
-            printf("\r\ncity:%s\r\n", cJSON_GetStringValue(city));
-            printf("%s, %s, %s\r\n", cJSON_GetStringValue(text), cJSON_GetStringValue(code), cJSON_GetStringValue(temp));
-
             // 检查各数据是否成功获取
             if (city != NULL && text != NULL && code != NULL && temp != NULL)
             {
+                printf("\r\ncity:%s\r\n", cJSON_GetStringValue(city));
+                printf("%s, %s, %s\r\n", cJSON_GetStringValue(text), cJSON_GetStringValue(code), cJSON_GetStringValue(temp));
+
                 strcpy(weather_data.location, cJSON_GetStringValue(city));
                 strcpy(weather_data.text, cJSON_GetStringValue(text));
 
                 weather_data.code = atoi(cJSON_GetStringValue(code));
                 weather_data.temp = atoi(cJSON_GetStringValue(temp));
+
+                cJSON_Delete(root);
 
                 return &weather_data;
             }

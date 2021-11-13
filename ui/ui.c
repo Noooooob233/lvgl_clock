@@ -369,7 +369,7 @@ void *ui_weather_update(void *param)
             }
             else
             {
-                lv_img_set_src(img_weather, weather_table[39]);
+                lv_img_set_src(img_weather, weather_table[MAX_WEATHER_CODE + 1]);
             }
 
             lv_label_set_text_fmt(label_localtion, "%s", data->location);
