@@ -171,6 +171,9 @@ weather_data_t *weather_data_upate()
     struct sockaddr_in servaddr;
     struct hostent *host = NULL;
 
+    uint len = 0;
+    uint offset = 0;
+
     printf("geting host\r\n");
     host = gethostbyname("api.seniverse.com");
     if (host != NULL)
@@ -232,19 +235,25 @@ weather_data_t *weather_data_upate()
         printf("socket send success\r\n");
     }
 
-    uint len = 0;
     bzero(buffer, sizeof(buffer));
 
     while (1)
     {
         printf("waiting for data\r\n");
 
-        if ((len = recv(s, buffer, sizeof(buffer), 0)) <= 0)
+        if ((len = recv(s, buffer + offset, sizeof(buffer) - offset, 0)) <= 0)
         {
             printf("no data\r\n");
             break;
         }
-        printf("%d\r\n", len);
+        offset += len;
+        printf("data len:%d, buffer len:%d\r\n", len, offset);
+
+        if (offset >= sizeof(buffer))
+        {
+            printf("buffer full\r\n");
+            return NULL;
+        }
     }
 
     printf("\r\nbuffer:\r\n");
