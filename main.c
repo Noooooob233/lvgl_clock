@@ -1,5 +1,5 @@
 #include "lvgl/lvgl.h"
-#include "lv_drivers/display/fbdev.h"
+#include "lv_drivers/display/drm.h"
 
 #include "ui/ui.h"
 
@@ -31,8 +31,9 @@ int main(int argc, char **argv)
 
     lv_init();
 
-    fbdev_init();
-    vt_init();
+    drm_init();
+    //fbdev_init();
+    //vt_init();
 
     static lv_color_t buf1[240 * 135];
     static lv_color_t buf2[240 * 135];
@@ -44,7 +45,7 @@ int main(int argc, char **argv)
     lv_disp_drv_init(&disp_drv);
 
     disp_drv.draw_buf = &disp_buf;
-    disp_drv.flush_cb = fbdev_flush;
+    disp_drv.flush_cb = drm_flush;
     disp_drv.hor_res = 240;
     disp_drv.ver_res = 135;
     lv_disp_drv_register(&disp_drv);
@@ -157,8 +158,9 @@ void vt_shutdown()
 
 void signal_handler(int s)
 {
-    fbdev_exit();
-    vt_shutdown();
+    drm_exit();
+    //fbdev_exit();
+    //vt_shutdown();
 
     exit(0);
 }
