@@ -125,6 +125,9 @@ static lv_obj_t *page1;
 static lv_obj_t *page2;
 static lv_obj_t *page_act;
 
+static pthread_t thread;
+static pthread_attr_t attr;
+
 static void ui_update(lv_timer_t *t);
 static void ui_clock_create(lv_obj_t *parent);
 static void ui_weather_create(lv_obj_t *parent);
@@ -331,9 +334,6 @@ static void ui_cpu_mem_monitor_create()
 
 static void ui_weather_create(lv_obj_t *parent)
 {
-    static pthread_t thread;
-    static pthread_attr_t attr;
-
     img_weather = lv_img_create(parent);
     lv_obj_align(img_weather, LV_ALIGN_CENTER, -60, 0);
     lv_img_set_src(img_weather, weather_table[39]);

@@ -1,43 +1,21 @@
 #include "net.h"
 #include <stdlib.h>
 #include <string.h>
-#include <unistd.h>
-#include <fcntl.h>
-#include <inttypes.h>
 #include <stdio.h>
-#include <time.h>
-#include <signal.h>
+#include "lvgl/lvgl.h"
 
 static float tx_speed = 0;
 static float rx_speed = 0;
 
 static NetworkIOData last_data;
-static void net_speed_update(int);
+static void net_speed_update(lv_timer_t *t);
 static bool getNetworkIO(NetworkIOData *data);
 
 void net_monitor_init()
 {
-    struct sigevent evp;
-
-    struct itimerspec ts;
-    timer_t timer;
-
-    evp.sigev_value.sival_ptr = &timer;
-    evp.sigev_notify = SIGEV_SIGNAL;
-    evp.sigev_signo = SIGUSR1;
-
-    signal(SIGUSR1, net_speed_update);
-
-    timer_create(CLOCK_REALTIME, &evp, &timer);
-
-    ts.it_interval.tv_sec = 1;
-    ts.it_interval.tv_nsec = 0;
-    ts.it_value.tv_sec = 1;
-    ts.it_value.tv_nsec = 0;
-
-    timer_settime(timer, 0, &ts, NULL);
-
     getNetworkIO(&last_data);
+
+    lv_timer_create(net_speed_update, 1000, NULL);
 }
 
 static bool getNetworkIO(NetworkIOData *data)
@@ -80,7 +58,7 @@ static bool getNetworkIO(NetworkIOData *data)
     return true;
 }
 
-static void net_speed_update(int s)
+static void net_speed_update(lv_timer_t *t)
 {
     NetworkIOData now_data;
 

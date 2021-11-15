@@ -521,11 +521,11 @@ err:
 	return -1;
 }
 
-static int drm_setup(unsigned int fourcc)
+static int drm_setup(const char *path, unsigned int fourcc)
 {
 	int ret;
 
-	drm_dev.fd = drm_open(DRM_CARD);
+	drm_dev.fd = drm_open(path);
 	if (drm_dev.fd < 0)
 		return -1;
 
@@ -765,15 +765,15 @@ void drm_get_sizes(lv_coord_t *width, lv_coord_t *height, uint32_t *dpi)
 		*dpi = DIV_ROUND_UP(drm_dev.width * 25400, drm_dev.mmWidth * 1000);
 }
 
-void drm_init(void)
+int drm_init(const char *path)
 {
 	int ret;
 
-	ret = drm_setup(DRM_FOURCC);
+	ret = drm_setup(path, DRM_FOURCC);
 	if (ret) {
 		close(drm_dev.fd);
 		drm_dev.fd = -1;
-		return;
+		return ret;
 	}
 
 	ret = drm_setup_buffers();
@@ -781,10 +781,12 @@ void drm_init(void)
 		err("DRM buffer allocation failed");
 		close(drm_dev.fd);
 		drm_dev.fd = -1;
-		return;
+		return ret;
 	}
 
 	info("DRM subsystem and buffer mapped successfully");
+
+	return 0;
 }
 
 void drm_exit(void)

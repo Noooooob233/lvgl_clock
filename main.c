@@ -25,13 +25,25 @@ void vt_shutdown(void);
 
 int main(int argc, char **argv)
 {
+    char drm_card[30] = {'\0'};
+
     signal(SIGINT, signal_handler);
     signal(SIGQUIT, signal_handler);
     signal(SIGTERM, signal_handler);
 
     lv_init();
 
-    drm_init();
+    for (int i = 0; i < 255; i++)
+    {
+        sprintf(drm_card, "/dev/dri/card%d", i);
+        if (drm_init(drm_card))
+        {
+            printf("%s init failed\n", drm_card);
+            continue;
+        }
+        break;
+    }
+
     //fbdev_init();
     //vt_init();
 
