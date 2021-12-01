@@ -47,11 +47,10 @@ int main(int argc, char **argv)
     //fbdev_init();
     //vt_init();
 
-    static lv_color_t buf1[240 * 135];
-    static lv_color_t buf2[240 * 135];
+    static lv_color_t buf[240 * 135 * (LV_COLOR_SIZE / 8)];
     static lv_disp_draw_buf_t disp_buf;
 
-    lv_disp_draw_buf_init(&disp_buf, buf1, buf2, 240 * 135);
+    lv_disp_draw_buf_init(&disp_buf, buf, NULL, 240 * 135);
 
     lv_disp_drv_t disp_drv;
     lv_disp_drv_init(&disp_drv);
@@ -66,8 +65,7 @@ int main(int argc, char **argv)
 
     while (1)
     {
-        lv_task_handler();
-        usleep(5000);
+        usleep(lv_task_handler() * 1000);
     }
 
     return 0;

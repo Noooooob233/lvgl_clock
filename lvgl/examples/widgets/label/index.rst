@@ -1,5 +1,3 @@
-C
-^
   
 Line wrap, recoloring and scrolling 
 """""""""""""""""""""""""""""""""""
@@ -19,7 +17,9 @@ Show LTR, RTL and Chinese texts
 .. lv_example:: widgets/label/lv_example_label_3
   :language: c
 
-MicroPython
-^^^^^^^^^^^
+Draw label with gradient color
+""""""""""""""""""""""""""""""""""""
 
-No examples yet.
+.. lv_example:: widgets/label/lv_example_label_4
+  :language: c
+
