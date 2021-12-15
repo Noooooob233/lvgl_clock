@@ -23,11 +23,15 @@
 static char config_location[128];
 static char config_key[128];
 
-static weather_data_t weather_data = {.code = 99, .temp = 0};
+static char s_buffer[4096] = {'\0'};
+
+static weather_now_t weather_now;
+static weather_day_t weather_daily[5];
 
 char *base64Encode(const char *buffer, int length, bool newLine);
 int URLEncode(const char *str, const int strSize, char *result, const int resultSize);
-void seniverse_v3(char *buf, int size, char *key, char *location);
+void seniverse_v3_now(char *buf, int size, char *key, char *location);
+void seniverse_v3_daily(char *buf, int size, char *private_key, char *location);
 void seniverse_v4(char *buf, int size, char *pubic_key, char *private_key);
 
 void weather_init(config_t *config)
@@ -36,13 +40,24 @@ void weather_init(config_t *config)
     strcpy(config_key, config->key);
 }
 
-void seniverse_v3(char *buf, int size, char *private_key, char *location)
+void seniverse_v3_now(char *buf, int size, char *private_key, char *location)
 {
     bzero(buf, size);
     snprintf(buf,
              size,
              "GET /v3/weather/now.json?key=%s&location=%s&language=zh-Hans&unit=c HTTP/1.1\r\n"
-             //  "GET /v3/weather/now.json?key=%s&location=%s&language=en&unit=c HTTP/1.1\r\n"
+             "Connection: Close\r\n"
+             "HOST: api.seniverse.com\r\n\r\n",
+             private_key,
+             location);
+}
+
+void seniverse_v3_daily(char *buf, int size, char *private_key, char *location)
+{
+    bzero(buf, size);
+    snprintf(buf,
+             size,
+             "GET /v3/weather/daily.json?key=%s&location=%s&language=zh-Hans&unit=c&start=0&days=5 HTTP/1.1\r\n"
              "Connection: Close\r\n"
              "HOST: api.seniverse.com\r\n\r\n",
              private_key,
@@ -163,9 +178,7 @@ int URLEncode(const char *str, const int strSize, char *result, const int result
 }
 #endif
 
-static char buffer[1024] = {'\0'};
-
-weather_data_t *weather_data_upate()
+weather_now_t *weather_get_now()
 {
     int s = 0;
     struct sockaddr_in servaddr;
@@ -221,11 +234,9 @@ weather_data_t *weather_data_upate()
         printf("socket connect success\r\n");
     }
 
-    seniverse_v3(buffer, 1024, config_key, config_location);
+    seniverse_v3_now(s_buffer, sizeof(s_buffer), config_key, config_location);
 
-    // seniverse_v4(buffer, 4096, pubic_key, private_key);
-
-    if (send(s, buffer, strlen(buffer), 0) == -1)
+    if (send(s, s_buffer, strlen(s_buffer), 0) == -1)
     {
         printf("socket send fail\r\n");
         return NULL;
@@ -235,13 +246,13 @@ weather_data_t *weather_data_upate()
         printf("socket send success\r\n");
     }
 
-    bzero(buffer, sizeof(buffer));
+    bzero(s_buffer, sizeof(s_buffer));
 
     while (1)
     {
         printf("waiting for data\r\n");
 
-        if ((len = recv(s, buffer + offset, sizeof(buffer) - offset, 0)) <= 0)
+        if ((len = recv(s, s_buffer + offset, sizeof(s_buffer) - offset, 0)) <= 0)
         {
             printf("no data\r\n");
             break;
@@ -249,7 +260,7 @@ weather_data_t *weather_data_upate()
         offset += len;
         printf("data len:%d, buffer len:%d\r\n", len, offset);
 
-        if (offset >= sizeof(buffer))
+        if (offset >= sizeof(s_buffer))
         {
             printf("buffer full\r\n");
             return NULL;
@@ -257,16 +268,16 @@ weather_data_t *weather_data_upate()
     }
 
     printf("\r\nbuffer:\r\n");
-    printf("%s\r\n\r\n", buffer);
+    printf("%s\r\n\r\n", s_buffer);
 
     close(s);
     printf("connection closed\r\n");
 
-    if (strstr(buffer, "HTTP/1.1 200 OK"))
+    if (strstr(s_buffer, "HTTP/1.1 200 OK"))
     {
         cJSON *root = NULL;
 
-        root = cJSON_Parse(strstr(buffer, "\r\n\r\n"));
+        root = cJSON_Parse(strstr(s_buffer, "\r\n\r\n"));
 
         if (root != NULL)
         {
@@ -276,31 +287,197 @@ weather_data_t *weather_data_upate()
 
             cJSON *location = cJSON_GetObjectItem(cJSON_GetArrayItem(results, 0), "location");
             cJSON *now = cJSON_GetObjectItem(cJSON_GetArrayItem(results, 0), "now");
+            char *str = NULL;
 
-            cJSON *city = cJSON_GetObjectItem(location, "name");
-
-            cJSON *text = cJSON_GetObjectItem(now, "text");
-            cJSON *code = cJSON_GetObjectItem(now, "code");
-            cJSON *temp = cJSON_GetObjectItem(now, "temperature");
-
-            // 检查各数据是否成功获取
-            if (city != NULL && text != NULL && code != NULL && temp != NULL)
+            str = cJSON_GetStringValue(cJSON_GetObjectItem(location, "name"));
+            if (str != NULL)
             {
-                printf("\r\ncity:%s\r\n", cJSON_GetStringValue(city));
-                printf("%s, %s, %s\r\n", cJSON_GetStringValue(text), cJSON_GetStringValue(code), cJSON_GetStringValue(temp));
-
-                strcpy(weather_data.location, cJSON_GetStringValue(city));
-                strcpy(weather_data.text, cJSON_GetStringValue(text));
-
-                weather_data.code = atoi(cJSON_GetStringValue(code));
-                weather_data.temp = atoi(cJSON_GetStringValue(temp));
-
-                cJSON_Delete(root);
-
-                return &weather_data;
+                strcpy(weather_now.location, str);
+            }
+            str = cJSON_GetStringValue(cJSON_GetObjectItem(now, "text"));
+            if (str != NULL)
+            {
+                strcpy(weather_now.text, str);
+            }
+            str = cJSON_GetStringValue(cJSON_GetObjectItem(now, "code"));
+            if (str != NULL)
+            {
+                weather_now.code = atoi(str);
+            }
+            str = cJSON_GetStringValue(cJSON_GetObjectItem(now, "temperature"));
+            if (str != NULL)
+            {
+                weather_now.temp = atoi(str);
             }
 
             cJSON_Delete(root);
+            return &weather_now;
+        }
+    }
+
+    return NULL;
+}
+
+weather_day_t *weather_get_daily()
+{
+    int s = 0;
+    struct sockaddr_in servaddr;
+    struct hostent *host = NULL;
+
+    uint len = 0;
+    uint offset = 0;
+
+    printf("geting host\r\n");
+    host = gethostbyname("api.seniverse.com");
+    if (host != NULL)
+    {
+        printf("get host success\r\n");
+        printf("h_name:%s\r\n", host->h_name);
+        printf("h_length:%d\r\n", host->h_length);
+
+        for (uint8_t i = 0; host->h_addr_list[i]; i++)
+        {
+            printf("%s\r\n", inet_ntoa(*(struct in_addr *)host->h_addr_list[i]));
+        }
+    }
+    else
+    {
+        printf("get host fail\r\n");
+        return NULL;
+    }
+
+    s = socket(AF_INET, SOCK_STREAM, 0);
+
+    if (s == -1)
+    {
+        printf("get socket fail\r\n");
+        return NULL;
+    }
+    else
+    {
+        printf("get socket success\r\n");
+    }
+
+    bzero(&servaddr, sizeof(servaddr));
+    servaddr.sin_family = AF_INET;
+    servaddr.sin_port = htons(80);
+
+    memcpy(&servaddr.sin_addr, host->h_addr_list[0], sizeof(struct in_addr));
+
+    if (connect(s, (struct sockaddr *)&servaddr, sizeof(servaddr)) == -1)
+    {
+        printf("socket connect fail\r\n");
+        return NULL;
+    }
+    else
+    {
+        printf("socket connect success\r\n");
+    }
+
+    seniverse_v3_daily(s_buffer, sizeof(s_buffer), config_key, config_location);
+
+    if (send(s, s_buffer, strlen(s_buffer), 0) == -1)
+    {
+        printf("socket send fail\r\n");
+        return NULL;
+    }
+    else
+    {
+        printf("socket send success\r\n");
+    }
+
+    bzero(s_buffer, sizeof(s_buffer));
+
+    while (1)
+    {
+        printf("waiting for data\r\n");
+
+        if ((len = recv(s, s_buffer + offset, sizeof(s_buffer) - offset, 0)) <= 0)
+        {
+            printf("no data\r\n");
+            break;
+        }
+        offset += len;
+        printf("data len:%d, buffer len:%d\r\n", len, offset);
+
+        if (offset >= sizeof(s_buffer))
+        {
+            printf("buffer full\r\n");
+            return NULL;
+        }
+    }
+
+    printf("\r\nbuffer:\r\n");
+    printf("%s\r\n\r\n", s_buffer);
+
+    close(s);
+    printf("connection closed\r\n");
+
+    if (strstr(s_buffer, "HTTP/1.1 200 OK"))
+    {
+        cJSON *root = NULL;
+
+        root = cJSON_Parse(strstr(s_buffer, "\r\n\r\n"));
+
+        if (root != NULL)
+        {
+            cJSON *results = cJSON_GetObjectItem(root, "results");
+
+            printf("%s\r\n", cJSON_Print(results));
+
+            cJSON *location = cJSON_GetObjectItem(cJSON_GetArrayItem(results, 0), "location");
+            cJSON *daily = cJSON_GetObjectItem(cJSON_GetArrayItem(results, 0), "daily");
+
+            cJSON *city = cJSON_GetObjectItem(location, "name");
+
+            for (int i = 0; i < 5; i++)
+            {
+                cJSON *day = cJSON_GetArrayItem(daily, i);
+                char *str = NULL;
+
+                if (day != NULL)
+                {
+                    str = cJSON_GetStringValue(city);
+                    if (str != NULL)
+                    {
+                        strcpy(weather_daily[i].location, str);
+                    }
+                    str = cJSON_GetStringValue(cJSON_GetObjectItem(day, "text_day"));
+                    if (str != NULL)
+                    {
+                        strcpy(weather_daily[i].text_day, str);
+                    }
+                    str = cJSON_GetStringValue(cJSON_GetObjectItem(day, "text_night"));
+                    if (str != NULL)
+                    {
+                        strcpy(weather_daily[i].text_night, str);
+                    }
+                    str = cJSON_GetStringValue(cJSON_GetObjectItem(day, "code_day"));
+                    if (str != NULL)
+                    {
+                        weather_daily[i].code_day = atoi(str);
+                    }
+                    str = cJSON_GetStringValue(cJSON_GetObjectItem(day, "code_night"));
+                    if (str != NULL)
+                    {
+                        weather_daily[i].code_night = atoi(str);
+                    }
+                    str = cJSON_GetStringValue(cJSON_GetObjectItem(day, "high"));
+                    if (str != NULL)
+                    {
+                        weather_daily[i].temp_high = atoi(str);
+                    }
+                    str = cJSON_GetStringValue(cJSON_GetObjectItem(day, "low"));
+                    if (str != NULL)
+                    {
+                        weather_daily[i].temp_low = atoi(str);
+                    }
+                }
+            }
+
+            cJSON_Delete(root);
+
+            return weather_daily;
         }
     }
 

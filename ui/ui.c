@@ -110,10 +110,14 @@ static lv_obj_t *label_hour;
 static lv_obj_t *label_min;
 static lv_obj_t *label_sec;
 static lv_obj_t *label_dot;
+static lv_obj_t *label_day;
 
 static lv_obj_t *label_localtion;
-static lv_obj_t *img_weather;
-static lv_obj_t *label_temperature;
+static lv_obj_t *img_weather_now;
+static lv_obj_t *label_now_temp;
+static lv_obj_t *img_weather_daily_day[2];
+static lv_obj_t *img_weather_daily_night[2];
+static lv_obj_t *label_weather_day[2];
 
 static lv_obj_t *cpu_temp;
 static lv_obj_t *mem_used;
@@ -121,16 +125,18 @@ static lv_obj_t *mem_used;
 static lv_obj_t *upload;
 static lv_obj_t *download;
 
-static lv_obj_t *page1;
-static lv_obj_t *page2;
-static lv_obj_t *page_act;
+static lv_obj_t *dot_page1;
+static lv_obj_t *dot_page2;
+static lv_obj_t *dot_page3;
+static lv_obj_t *dot_page_act;
 
 static pthread_t thread;
 static pthread_attr_t attr;
 
 static void ui_update(lv_timer_t *t);
 static void ui_clock_create(lv_obj_t *parent);
-static void ui_weather_create(lv_obj_t *parent);
+static void ui_weather_today_create(lv_obj_t *parent);
+static void ui_weather_daily_create(lv_obj_t *parent);
 void *ui_weather_update(void *param);
 static void ui_net_monitor_create(void);
 static void ui_cpu_mem_monitor_create(void);
@@ -154,29 +160,41 @@ void ui_init()
     tv = lv_tabview_create(lv_scr_act(), LV_DIR_RIGHT, 0);
     lv_obj_t *t1 = lv_tabview_add_tab(tv, " ");
     lv_obj_t *t2 = lv_tabview_add_tab(tv, " ");
+    lv_obj_t *t3 = lv_tabview_add_tab(tv, " ");
 
     lv_obj_set_style_bg_color(tv, lv_palette_lighten(LV_PALETTE_GREY, 2), 0);
 
-    ui_clock_create(t1);
-    ui_weather_create(t2);
+    ui_weather_today_create(t1);
+    ui_clock_create(t2);
+    ui_weather_daily_create(t3);
+    lv_tabview_set_act(tv, 1, true);
 
-    page1 = lv_obj_create(lv_scr_act());
-    lv_obj_align(page1, LV_ALIGN_RIGHT_MID, -5, -10);
-    lv_obj_set_size(page1, 10, 10);
-    lv_obj_set_style_bg_color(page1, lv_palette_main(LV_PALETTE_GREY), 0);
-    lv_obj_set_style_radius(page1, LV_RADIUS_CIRCLE, 0);
+    pthread_attr_init(&attr);
+    pthread_create(&thread, &attr, ui_weather_update, 0);
 
-    page2 = lv_obj_create(lv_scr_act());
-    lv_obj_align(page2, LV_ALIGN_RIGHT_MID, -5, 10);
-    lv_obj_set_size(page2, 10, 10);
-    lv_obj_set_style_bg_color(page2, lv_palette_main(LV_PALETTE_GREY), 0);
-    lv_obj_set_style_radius(page2, LV_RADIUS_CIRCLE, 0);
+    dot_page1 = lv_obj_create(lv_scr_act());
+    lv_obj_align(dot_page1, LV_ALIGN_RIGHT_MID, -5, -15);
+    lv_obj_set_size(dot_page1, 10, 10);
+    lv_obj_set_style_bg_color(dot_page1, lv_palette_main(LV_PALETTE_GREY), 0);
+    lv_obj_set_style_radius(dot_page1, LV_RADIUS_CIRCLE, 0);
 
-    page_act = lv_obj_create(lv_scr_act());
-    lv_obj_align(page_act, LV_ALIGN_RIGHT_MID, -5, -10);
-    lv_obj_set_size(page_act, 10, 10);
-    lv_obj_set_style_bg_color(page_act, lv_palette_main(LV_PALETTE_RED), 0);
-    lv_obj_set_style_radius(page_act, LV_RADIUS_CIRCLE, 0);
+    dot_page2 = lv_obj_create(lv_scr_act());
+    lv_obj_align(dot_page2, LV_ALIGN_RIGHT_MID, -5, 0);
+    lv_obj_set_size(dot_page2, 10, 10);
+    lv_obj_set_style_bg_color(dot_page2, lv_palette_main(LV_PALETTE_GREY), 0);
+    lv_obj_set_style_radius(dot_page2, LV_RADIUS_CIRCLE, 0);
+
+    dot_page3 = lv_obj_create(lv_scr_act());
+    lv_obj_align(dot_page3, LV_ALIGN_RIGHT_MID, -5, 15);
+    lv_obj_set_size(dot_page3, 10, 10);
+    lv_obj_set_style_bg_color(dot_page3, lv_palette_main(LV_PALETTE_GREY), 0);
+    lv_obj_set_style_radius(dot_page3, LV_RADIUS_CIRCLE, 0);
+
+    dot_page_act = lv_obj_create(lv_scr_act());
+    lv_obj_align(dot_page_act, LV_ALIGN_RIGHT_MID, -5, 0);
+    lv_obj_set_size(dot_page_act, 10, 10);
+    lv_obj_set_style_bg_color(dot_page_act, lv_palette_main(LV_PALETTE_RED), 0);
+    lv_obj_set_style_radius(dot_page_act, LV_RADIUS_CIRCLE, 0);
 
     lv_timer_create(ui_tabview_switch_cb, 5000, NULL);
 
@@ -188,10 +206,10 @@ void ui_init()
 
 static void ui_update(lv_timer_t *t)
 {
+    char *weeks[7] = {"Sun.", "Mon.", "Tues.", "Wed.", "Thur.", "Fri.", "Sat."};
     static struct tm last_date;
     time_t now_time;
     struct tm *now_date;
-
     static uint8_t toggle;
 
     time(&now_time);
@@ -228,11 +246,17 @@ static void ui_update(lv_timer_t *t)
         ui_net_speed_update();
     }
 
+    if (now_date->tm_mday != last_date.tm_mday)
+    {
+        lv_label_set_text_fmt(label_day, "%d/%d  %s", now_date->tm_mon + 1, now_date->tm_mday, weeks[now_date->tm_wday]);
+    }
+
     last_date = *now_date;
 }
 
 static void ui_clock_create(lv_obj_t *parent)
 {
+    char *weeks[7] = {"Sun.", "Mon.", "Tues.", "Wed.", "Thur.", "Fri.", "Sat."};
     time_t now_time;
     struct tm *now_date;
 
@@ -241,23 +265,28 @@ static void ui_clock_create(lv_obj_t *parent)
 
     label_hour = lv_label_create(parent);
     lv_obj_set_style_text_font(label_hour, &lv_font_montserrat_48, 0);
-    lv_obj_align(label_hour, LV_ALIGN_CENTER, -70, 0);
+    lv_obj_align(label_hour, LV_ALIGN_CENTER, -70, 0 - 8);
     lv_label_set_text_fmt(label_hour, "%2d", now_date->tm_hour);
 
     label_dot = lv_label_create(parent);
     lv_obj_set_style_text_font(label_dot, &lv_font_montserrat_48, 0);
-    lv_obj_align(label_dot, LV_ALIGN_CENTER, -25, -3);
+    lv_obj_align(label_dot, LV_ALIGN_CENTER, -25, -3 - 8);
     lv_label_set_text(label_dot, ":");
 
     label_min = lv_label_create(parent);
     lv_obj_set_style_text_font(label_min, &lv_font_montserrat_48, 0);
-    lv_obj_align(label_min, LV_ALIGN_CENTER, 20, 0);
+    lv_obj_align(label_min, LV_ALIGN_CENTER, 20, 0 - 8);
     lv_label_set_text_fmt(label_min, "%02d", now_date->tm_min);
 
     label_sec = lv_label_create(parent);
     lv_obj_set_style_text_font(label_sec, &lv_font_montserrat_24, 0);
-    lv_obj_align(label_sec, LV_ALIGN_CENTER, 75, 8);
+    lv_obj_align(label_sec, LV_ALIGN_CENTER, 75, 8 - 8);
     lv_label_set_text_fmt(label_sec, "%02d", now_date->tm_sec);
+
+    label_day = lv_label_create(parent);
+    lv_obj_set_style_text_font(label_day, &lv_font_montserrat_20, 0);
+    lv_obj_align(label_day, LV_ALIGN_CENTER, 40, 30);
+    lv_label_set_text_fmt(label_day, "%d/%d  %s", now_date->tm_mon + 1, now_date->tm_mday, weeks[now_date->tm_wday]);
 }
 
 static void ui_net_speed_update()
@@ -332,11 +361,11 @@ static void ui_cpu_mem_monitor_create()
     lv_obj_align_to(mem_used, img_cpu, LV_ALIGN_CENTER, 180, 0);
 }
 
-static void ui_weather_create(lv_obj_t *parent)
+static void ui_weather_today_create(lv_obj_t *parent)
 {
-    img_weather = lv_img_create(parent);
-    lv_obj_align(img_weather, LV_ALIGN_CENTER, -60, 0);
-    lv_img_set_src(img_weather, weather_table[39]);
+    img_weather_now = lv_img_create(parent);
+    lv_obj_align(img_weather_now, LV_ALIGN_CENTER, -60, 0);
+    lv_img_set_src(img_weather_now, weather_table[MAX_WEATHER_CODE + 1]);
 
     LV_FONT_DECLARE(font_deng);
     label_localtion = lv_label_create(parent);
@@ -344,36 +373,88 @@ static void ui_weather_create(lv_obj_t *parent)
     lv_obj_set_style_text_font(label_localtion, &font_deng, 0);
     lv_label_set_text_fmt(label_localtion, "N/A");
 
-    label_temperature = lv_label_create(parent);
-    lv_obj_align(label_temperature, LV_ALIGN_CENTER, 35, 16);
-    lv_obj_set_style_text_font(label_temperature, &lv_font_montserrat_24, 0);
-    lv_label_set_text_fmt(label_temperature, "N/A °C");
+    label_now_temp = lv_label_create(parent);
+    lv_obj_align(label_now_temp, LV_ALIGN_CENTER, 35, 16);
+    lv_obj_set_style_text_font(label_now_temp, &lv_font_montserrat_24, 0);
+    lv_label_set_text_fmt(label_now_temp, "N/A °C");
+}
 
-    pthread_attr_init(&attr);
-    pthread_create(&thread, &attr, ui_weather_update, 0);
+static void ui_weather_daily_create(lv_obj_t *parent)
+{
+    lv_obj_t *line[2];
+    static lv_point_t points[2] = {{0, 50}, {25, 0}};
+
+    for (int i = 0; i < 2; i++)
+    {
+        line[i] = lv_line_create(parent);
+        lv_line_set_points(line[i], points, 2);
+        lv_obj_set_style_line_width(line[i], 2, 0);
+        lv_obj_set_style_line_color(line[i], lv_palette_main(LV_PALETTE_RED), 0);
+        lv_obj_align(line[i], LV_ALIGN_CENTER, -52 + i * 104 - 7, -6);
+
+        img_weather_daily_day[i] = lv_img_create(parent);
+        lv_obj_align_to(img_weather_daily_day[i], line[i], LV_ALIGN_CENTER, -55, -32);
+        lv_img_set_src(img_weather_daily_day[i], weather_table[MAX_WEATHER_CODE + 1]);
+        lv_img_set_zoom(img_weather_daily_day[i], 150);
+
+        img_weather_daily_night[i] = lv_img_create(parent);
+        lv_obj_align_to(img_weather_daily_night[i], line[i], LV_ALIGN_CENTER, -5, -15);
+        lv_img_set_src(img_weather_daily_night[i], weather_table[MAX_WEATHER_CODE + 1]);
+        lv_img_set_zoom(img_weather_daily_night[i], 150);
+
+        label_weather_day[i] = lv_label_create(parent);
+        lv_obj_align_to(label_weather_day[i], line[i], LV_ALIGN_CENTER, -15, 43);
+        lv_obj_set_style_text_font(label_weather_day[i], &lv_font_montserrat_14, 0);
+        lv_label_set_text_fmt(label_weather_day[i], "N/A");
+    }
 }
 
 void *ui_weather_update(void *param)
 {
-    weather_data_t *data = NULL;
+    weather_now_t *now = NULL;
+    weather_day_t *daily = NULL;
 
     while (1)
     {
-        data = weather_data_upate();
+        now = weather_get_now();
+        daily = weather_get_daily();
 
-        if (data != NULL)
+        if (now != NULL && daily != NULL)
         {
-            if (data->code >= 0 && data->code <= MAX_WEATHER_CODE)
+            if (now->code >= 0 && now->code <= MAX_WEATHER_CODE)
             {
-                lv_img_set_src(img_weather, weather_table[data->code]);
+                lv_img_set_src(img_weather_now, weather_table[now->code]);
             }
             else
             {
-                lv_img_set_src(img_weather, weather_table[MAX_WEATHER_CODE + 1]);
+                lv_img_set_src(img_weather_now, weather_table[MAX_WEATHER_CODE + 1]);
             }
 
-            lv_label_set_text_fmt(label_localtion, "%s", data->location);
-            lv_label_set_text_fmt(label_temperature, "%d °C", data->temp);
+            lv_label_set_text_fmt(label_localtion, "%s", now->location);
+            lv_label_set_text_fmt(label_now_temp, "%d °C", now->temp);
+
+            for (int i = 0; i < 2; i++)
+            {
+                if (daily[i + 1].code_day >= 0 && daily[i + 1].code_day <= MAX_WEATHER_CODE)
+                {
+                    lv_img_set_src(img_weather_daily_day[i], weather_table[daily[i + 1].code_day]);
+                }
+                else
+                {
+                    lv_img_set_src(img_weather_daily_day[i], weather_table[MAX_WEATHER_CODE + 1]);
+                }
+
+                if (daily[i + 1].code_night >= 0 && daily[i + 1].code_night <= MAX_WEATHER_CODE)
+                {
+                    lv_img_set_src(img_weather_daily_night[i], weather_table[daily[i + 1].code_night]);
+                }
+                else
+                {
+                    lv_img_set_src(img_weather_daily_night[i], weather_table[MAX_WEATHER_CODE + 1]);
+                }
+
+                lv_label_set_text_fmt(label_weather_day[i], "%d°C ~ %d°C", daily[i + 1].temp_low, daily[i + 1].temp_high);
+            }
 
             printf("next update:after 1hour\r\n");
             sleep(60 * 60);
@@ -395,20 +476,25 @@ static void ui_anim_y_cb(void *var, int32_t v)
 
 static void ui_tabview_switch_cb(lv_timer_t *t)
 {
-    static uint16_t next_tab_idx = 1;
+    static int next_tab_idx = 0;
+    static int setp = 1;
 
     lv_anim_t a;
     lv_anim_init(&a);
-    lv_anim_set_var(&a, page_act);
+    lv_anim_set_var(&a, dot_page_act);
 
     switch (next_tab_idx)
     {
     case 0:
-        lv_anim_set_values(&a, 10, -10);
+        lv_anim_set_values(&a, lv_obj_get_y_aligned(dot_page_act), -15);
         break;
 
     case 1:
-        lv_anim_set_values(&a, -10, 10);
+        lv_anim_set_values(&a, lv_obj_get_y_aligned(dot_page_act), 0);
+        break;
+
+    case 2:
+        lv_anim_set_values(&a, lv_obj_get_y_aligned(dot_page_act), 15);
         break;
 
     default:
@@ -423,5 +509,14 @@ static void ui_tabview_switch_cb(lv_timer_t *t)
 
     lv_tabview_set_act(tv, next_tab_idx, true);
 
-    next_tab_idx = (next_tab_idx + 1) % 2;
+    next_tab_idx = next_tab_idx + setp;
+
+    if (next_tab_idx == 2)
+    {
+        setp = -1;
+    }
+    else if (next_tab_idx == 0)
+    {
+        setp = 1;
+    }
 }

@@ -56,14 +56,26 @@ extern "C"
 
     typedef struct
     {
-        char location[16];
-        char text[16];
+        char location[64];
+        char text[64];
         int code;
         int temp;
-    } weather_data_t;
+    } weather_now_t;
+
+    typedef struct
+    {
+        char location[64];
+        char text_day[64];
+        char text_night[64];
+        int code_day;
+        int code_night;
+        int temp_high;
+        int temp_low;
+    } weather_day_t;
 
     void weather_init(config_t *config);
-    weather_data_t *weather_data_upate(void);
+    weather_now_t *weather_get_now(void);
+    weather_day_t *weather_get_daily(void);
 
 #ifdef __cplusplus
 } /* extern "C" */
